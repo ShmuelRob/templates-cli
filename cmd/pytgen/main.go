@@ -1,19 +1,19 @@
 package main
 
 import (
-    "fmt"
-    "os"
+	"fmt"
+	"os"
 
-    "github.com/yourusername/python-template-generator/internal/cli"
+	"https://github.com/ShmuelRob/templates-cli/internal/cli"
 )
 
 func main() {
-    // Create CLI app
-    app := cli.NewApp()
-    
-    // Run the CLI app
-    if err := app.Run(os.Args); err != nil {
-        fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-        os.Exit(1)
-    }
+	// Create CLI app
+	app := cli.NewApp()
+
+	// Run the CLI app
+	if err := app.Run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 }
