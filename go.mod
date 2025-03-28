@@ -1,4 +1,4 @@
-module github.com/yourusername/python-template-generator
+module github.com/ShmuelRob/templates-cli/internal/cli
 
 go 1.18
 
