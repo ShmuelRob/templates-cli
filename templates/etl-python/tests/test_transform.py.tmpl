@@ -1,0 +1,152 @@
+"""Tests for the transform module."""
+import unittest
+from unittest.mock import patch
+import pandas as pd
+{{ if eq .TransformMethod "advanced" }}
+import numpy as np
+{{ end }}
+
+from src.transform import transform_data
+
+class TestTransform(unittest.TestCase):
+    """Test cases for the transform module."""
+    
+    def setUp(self):
+        """Set up test data."""
+        # Create a sample DataFrame for testing
+        self.sample_data = pd.DataFrame({
+            'id': [1, 2, 3, 4, 5],
+            'name': ['A', 'B', None, 'D', 'E'],
+            'value': [10.5, 20.0, 30.5, None, 50.0],
+            'category': ['X', 'Y', 'X', 'Y', 'Z']
+        })
+    
+    def test_transform_handles_missing_values(self):
+        """Test that transform properly handles missing values."""
+        result = transform_data(self.sample_data)
+        
+        # Check that there are no missing values in the result
+        self.assertEqual(result.isna().sum().sum(), 0)
+    
+    {{ if eq .TransformMethod "basic" }}
+    def test_basic_transformation(self):
+        """Test the basic transformation logic."""
+        result = transform_data(self.sample_data)
+        
+        # Basic transformation should at minimum handle missing values and duplicates
+        self.assertEqual(len(result), 5)  # No duplicates to remove
+        self.assertEqual(result.isna().sum().sum(), 0)  # No missing values
+        
+        # Check that the original columns are preserved
+        self.assertListEqual(list(result.columns), ['id', 'name', 'value', 'category'])
+    
+    def test_transform_handles_non_dataframe_input(self):
+        """Test that transform can handle non-DataFrame inputs."""
+        # Test with a dictionary
+        dict_data = {
+            'id': [1, 2, 3],
+            'value': [10, 20, 30]
+        }
+        result = transform_data(dict_data)
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(len(result), 3)
+        
+        # Test with a list of dictionaries
+        list_data = [
+            {'id': 1, 'value': 10},
+            {'id': 2, 'value': 20},
+            {'id': 3, 'value': 30}
+        ]
+        result = transform_data(list_data)
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(len(result), 3)
+    
+    {{ else if eq .TransformMethod "advanced" }}
+    def test_advanced_transformation(self):
+        """Test the advanced transformation logic."""
+        result = transform_data(self.sample_data)
+        
+        # Advanced transformation should handle missing values, outliers, and feature engineering
+        self.assertEqual(len(result), 5)  # No duplicates to remove
+        self.assertEqual(result.isna().sum().sum(), 0)  # No missing values
+        
+        # Check that numeric columns have been scaled (should have mean close to 0)
+        numeric_columns = result.select_dtypes(include=['int64', 'float64']).columns
+        for col in numeric_columns:
+            if col in ['id', 'value']:  # Original numeric columns should be scaled
+                self.assertAlmostEqual(result[col].mean(), 0, delta=0.1)
+                self.assertAlmostEqual(result[col].std(), 1, delta=0.1)
+    
+    def test_outlier_handling(self):
+        """Test that outliers are properly handled."""
+        # Create data with outliers
+        outlier_data = pd.DataFrame({
+            'value': [10, 15, 12, 14, 100]  # 100 is an outlier
+        })
+        
+        result = transform_data(outlier_data)
+        
+        # Check that the outlier has been handled
+        self.assertEqual(len(result), 5)  # All rows preserved
+        
+        # If using winsorization, the max value should be capped
+        # Get the original Q3 + 1.5*IQR
+        Q1 = outlier_data['value'].quantile(0.25)
+        Q3 = outlier_data['value'].quantile(0.75)
+        IQR = Q3 - Q1
+        upper_bound = Q3 + 1.5 * IQR
+        
+        # After standardization, we need to scale the bounds for comparison
+        # This test may need adjustment depending on exact implementation
+        self.assertTrue(result['value'].abs().max() <= 5)  # Reasonable bound after standardization
+    
+    def test_categorical_encoding(self):
+        """Test that categorical variables are properly encoded."""
+        # Data with categorical variable
+        cat_data = pd.DataFrame({
+            'id': [1, 2, 3],
+            'category': ['A', 'B', 'A']
+        })
+        
+        result = transform_data(cat_data)
+        
+        # One-hot encoding should create additional columns
+        self.assertGreater(len(result.columns), 2)
+        
+        # The original categorical column should be removed
+        self.assertNotIn('category', result.columns)
+        
+        # There should be encoded columns for the categories
+        self.assertTrue(any(col.startswith('category_') for col in result.columns))
+    
+    def test_transform_handles_non_dataframe_input(self):
+        """Test that transform can handle non-DataFrame inputs."""
+        # Test with a dictionary
+        dict_data = {
+            'id': [1, 2, 3],
+            'value': [10, 20, 30]
+        }
+        result = transform_data(dict_data)
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(len(result), 3)
+        
+        # Test with a list of dictionaries
+        list_data = [
+            {'id': 1, 'value': 10},
+            {'id': 2, 'value': 20},
+            {'id': 3, 'value': 30}
+        ]
+        result = transform_data(list_data)
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertEqual(len(result), 3)
+    {{ end }}
+    
+    def test_transform_error_handling(self):
+        """Test that transform properly handles errors."""
+        # Test with invalid data type
+        with self.assertRaises(TypeError):
+            transform_data("invalid data type")
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,198 @@
+"""Transform extracted data using {{ .TransformMethod }} method."""
+import logging
+from typing import Any, Dict, List, Union
+
+{{ if eq .TransformMethod "basic" }}
+import pandas as pd
+{{ else if eq .TransformMethod "advanced" }}
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+{{ end }}
+
+logger = logging.getLogger(__name__)
+
+{{ if eq .TransformMethod "basic" }}
+def transform_data(data: Any) -> Any:
+    """
+    Perform basic transformations on the extracted data.
+    
+    Args:
+        data: The data to transform (typically a pandas DataFrame)
+        
+    Returns:
+        Transformed data
+    """
+    logger.info("Performing basic data transformations")
+    
+    try:
+        # Convert to DataFrame if not already
+        if not isinstance(data, pd.DataFrame):
+            if isinstance(data, dict) or isinstance(data, list):
+                data = pd.DataFrame(data)
+            else:
+                raise TypeError(f"Unsupported data type for transformation: {type(data)}")
+                
+        # Make a copy to avoid modifying the original data
+        transformed_data = data.copy()
+        
+        # Basic transformations
+        
+        # 1. Drop any duplicate rows
+        original_rows = len(transformed_data)
+        transformed_data = transformed_data.drop_duplicates()
+        logger.info(f"Removed {original_rows - len(transformed_data)} duplicate rows")
+        
+        # 2. Handle missing values
+        for column in transformed_data.columns:
+            missing_count = transformed_data[column].isna().sum()
+            if missing_count > 0:
+                logger.info(f"Column '{column}' has {missing_count} missing values")
+                
+                # For numeric columns, fill with mean
+                if pd.api.types.is_numeric_dtype(transformed_data[column]):
+                    transformed_data[column] = transformed_data[column].fillna(transformed_data[column].mean())
+                    logger.info(f"Filled missing values in '{column}' with mean value")
+                # For other columns, fill with most frequent value
+                else:
+                    transformed_data[column] = transformed_data[column].fillna(transformed_data[column].mode()[0])
+                    logger.info(f"Filled missing values in '{column}' with most frequent value")
+                    
+        # 3. Convert column types if necessary
+        # Example: transformed_data['date_column'] = pd.to_datetime(transformed_data['date_column'])
+        
+        # 4. Rename columns if necessary
+        # Example: transformed_data = transformed_data.rename(columns={'old_name': 'new_name'})
+        
+        # 5. Filter rows if necessary
+        # Example: transformed_data = transformed_data[transformed_data['value'] > 0]
+        
+        # 6. Drop unnecessary columns
+        # Example: transformed_data = transformed_data.drop(columns=['unnecessary_column'])
+        
+        logger.info(f"Basic transformation complete. Transformed data has {len(transformed_data)} rows and {len(transformed_data.columns)} columns")
+        return transformed_data
+        
+    except Exception as e:
+        logger.error(f"Error during basic transformation: {str(e)}")
+        raise
+
+{{ else if eq .TransformMethod "advanced" }}
+def transform_data(data: Any) -> Any:
+    """
+    Perform advanced transformations on the extracted data.
+    
+    Args:
+        data: The data to transform (typically a pandas DataFrame)
+        
+    Returns:
+        Transformed data
+    """
+    logger.info("Performing advanced data transformations")
+    
+    try:
+        # Convert to DataFrame if not already
+        if not isinstance(data, pd.DataFrame):
+            if isinstance(data, dict) or isinstance(data, list):
+                data = pd.DataFrame(data)
+            else:
+                raise TypeError(f"Unsupported data type for transformation: {type(data)}")
+                
+        # Make a copy to avoid modifying the original data
+        transformed_data = data.copy()
+        
+        # 1. Handle missing values with more sophisticated methods
+        logger.info("Handling missing values")
+        for column in transformed_data.columns:
+            missing_count = transformed_data[column].isna().sum()
+            if missing_count > 0:
+                logger.info(f"Column '{column}' has {missing_count} missing values")
+                
+                # For numeric columns, use interpolation
+                if pd.api.types.is_numeric_dtype(transformed_data[column]):
+                    transformed_data[column] = transformed_data[column].interpolate(method='linear')
+                    # Fill any remaining NaNs (at the beginning) with the first non-NaN value
+                    if transformed_data[column].isna().any():
+                        transformed_data[column] = transformed_data[column].fillna(method='bfill')
+                        
+                # For categorical, use more advanced imputation or mode
+                else:
+                    transformed_data[column] = transformed_data[column].fillna(transformed_data[column].mode()[0])
+        
+        # 2. Feature engineering
+        logger.info("Performing feature engineering")
+        
+        # Example: Create date-based features
+        # if 'date' in transformed_data.columns:
+        #     transformed_data['date'] = pd.to_datetime(transformed_data['date'])
+        #     transformed_data['year'] = transformed_data['date'].dt.year
+        #     transformed_data['month'] = transformed_data['date'].dt.month
+        #     transformed_data['dayofweek'] = transformed_data['date'].dt.dayofweek
+        
+        # Example: Create interaction features
+        # if 'feature1' in transformed_data.columns and 'feature2' in transformed_data.columns:
+        #     transformed_data['feature1_times_feature2'] = transformed_data['feature1'] * transformed_data['feature2']
+        
+        # 3. Outlier detection and handling
+        logger.info("Handling outliers")
+        numeric_columns = transformed_data.select_dtypes(include=['int64', 'float64']).columns
+        
+        for column in numeric_columns:
+            # Calculate IQR
+            Q1 = transformed_data[column].quantile(0.25)
+            Q3 = transformed_data[column].quantile(0.75)
+            IQR = Q3 - Q1
+            
+            # Define outlier bounds
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            
+            # Log outlier information
+            outliers = transformed_data[(transformed_data[column] < lower_bound) | (transformed_data[column] > upper_bound)]
+            if len(outliers) > 0:
+                logger.info(f"Found {len(outliers)} outliers in column '{column}'")
+                
+                # Option 1: Cap outliers at bounds (Winsorization)
+                transformed_data[column] = transformed_data[column].clip(lower=lower_bound, upper=upper_bound)
+                logger.info(f"Capped outliers in column '{column}' to range [{lower_bound:.2f}, {upper_bound:.2f}]")
+                
+                # Option 2: Remove outlier rows
+                # transformed_data = transformed_data[(transformed_data[column] >= lower_bound) & (transformed_data[column] <= upper_bound)]
+                
+        # 4. Normalize/scale numeric features
+        logger.info("Scaling numeric features")
+        if len(numeric_columns) > 0:
+            scaler = StandardScaler()
+            transformed_data[numeric_columns] = scaler.fit_transform(transformed_data[numeric_columns])
+            logger.info(f"Scaled {len(numeric_columns)} numeric columns using StandardScaler")
+        
+        # 5. Encode categorical variables
+        categorical_columns = transformed_data.select_dtypes(include=['object']).columns
+        if len(categorical_columns) > 0:
+            logger.info(f"Encoding {len(categorical_columns)} categorical features")
+            
+            for column in categorical_columns:
+                # Option 1: One-hot encoding
+                one_hot = pd.get_dummies(transformed_data[column], prefix=column, drop_first=True)
+                transformed_data = pd.concat([transformed_data, one_hot], axis=1)
+                transformed_data = transformed_data.drop(columns=[column])
+                logger.info(f"Applied one-hot encoding to column '{column}'")
+                
+                # Option 2: Label encoding
+                # from sklearn.preprocessing import LabelEncoder
+                # le = LabelEncoder()
+                # transformed_data[column] = le.fit_transform(transformed_data[column])
+        
+        # 6. Additional advanced transformations
+        # - Dimensionality reduction (PCA)
+        # - Text feature extraction
+        # - Time series transformations
+        # - Etc.
+        
+        logger.info(f"Advanced transformation complete. Transformed data has {len(transformed_data)} rows and {len(transformed_data.columns)} columns")
+        return transformed_data
+        
+    except Exception as e:
+        logger.error(f"Error during advanced transformation: {str(e)}")
+        raise
+{{ end }}

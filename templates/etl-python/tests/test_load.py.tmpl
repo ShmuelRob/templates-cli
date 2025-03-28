@@ -1,0 +1,199 @@
+"""Tests for the load module."""
+import unittest
+from unittest.mock import patch, MagicMock
+import pandas as pd
+import os
+
+from src.load import load_data
+
+class TestLoad(unittest.TestCase):
+    """Test cases for the load module."""
+    
+    def setUp(self):
+        """Set up test data."""
+        # Create a sample DataFrame for testing
+        self.sample_data = pd.DataFrame({
+            'id': [1, 2, 3],
+            'name': ['A', 'B', 'C'],
+            'value': [10.5, 20.0, 30.5]
+        })
+    
+    {{ if eq .LoadDestination "file" }}
+    def test_load_to_csv(self):
+        """Test loading data to a CSV file."""
+        import tempfile
+        import os
+        
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            output_path = os.path.join(tmpdirname, "output.csv")
+            
+            # Test loading
+            load_data(self.sample_data, output_path)
+            
+            # Verify the file was created
+            self.assertTrue(os.path.exists(output_path))
+            
+            # Verify the file content
+            loaded_data = pd.read_csv(output_path)
+            self.assertEqual(len(loaded_data), 3)
+            self.assertListEqual(list(loaded_data.columns), ['id', 'name', 'value'])
+    
+    def test_load_creates_directories(self):
+        """Test that load creates directories if they don't exist."""
+        import tempfile
+        import os
+        
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Use a path with subdirectories that don't exist
+            output_path = os.path.join(tmpdirname, "subdir1", "subdir2", "output.csv")
+            
+            # Test loading
+            load_data(self.sample_data, output_path)
+            
+            # Verify the file was created
+            self.assertTrue(os.path.exists(output_path))
+    
+    def test_load_different_formats(self):
+        """Test loading data to different file formats."""
+        import tempfile
+        import os
+        
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Test JSON format
+            json_path = os.path.join(tmpdirname, "output.json")
+            load_data(self.sample_data, json_path)
+            self.assertTrue(os.path.exists(json_path))
+            
+            # Test Excel format if openpyxl is installed
+            try:
+                import openpyxl
+                excel_path = os.path.join(tmpdirname, "output.xlsx")
+                load_data(self.sample_data, excel_path)
+                self.assertTrue(os.path.exists(excel_path))
+            except ImportError:
+                pass
+            
+            # Test default format when no extension is provided
+            no_ext_path = os.path.join(tmpdirname, "output")
+            load_data(self.sample_data, no_ext_path)
+            self.assertTrue(os.path.exists(no_ext_path + ".csv"))
+    
+    {{ else if eq .LoadDestination "database" }}
+    @patch('sqlalchemy.create_engine')
+    def test_load_to_database(self, mock_create_engine):
+        """Test loading data to a database."""
+        # Create a mock engine
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        
+        # Mock pandas to_sql method
+        with patch.object(pd.DataFrame, 'to_sql') as mock_to_sql:
+            # Test loading
+            load_data(self.sample_data, "test_table", "replace")
+            
+            # Assertions
+            mock_create_engine.assert_called_once()
+            mock_to_sql.assert_called_once_with(
+                name="test_table",
+                con=mock_engine,
+                if_exists="replace",
+                index=False
+            )
+    
+    @patch('sqlalchemy.create_engine')
+    def test_load_with_different_if_exists_options(self, mock_create_engine):
+        """Test loading with different if_exists options."""
+        # Create a mock engine
+        mock_engine = MagicMock()
+        mock_create_engine.return_value = mock_engine
+        
+        # Mock pandas to_sql method
+        with patch.object(pd.DataFrame, 'to_sql') as mock_to_sql:
+            # Test 'append' option
+            load_data(self.sample_data, "test_table", "append")
+            mock_to_sql.assert_called_with(
+                name="test_table",
+                con=mock_engine,
+                if_exists="append",
+                index=False
+            )
+            
+            # Test 'fail' option
+            load_data(self.sample_data, "test_table", "fail")
+            mock_to_sql.assert_called_with(
+                name="test_table",
+                con=mock_engine,
+                if_exists="fail",
+                index=False
+            )
+    
+    {{ else if eq .LoadDestination "api" }}
+    @patch('requests.post')
+    def test_load_to_api(self, mock_post):
+        """Test loading data to an API."""
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "count": 3}
+        mock_post.return_value = mock_response
+        
+        # Test loading
+        load_data(self.sample_data, "https://test-api.example.com/data")
+        
+        # Assertions
+        mock_post.assert_called_once()
+        
+        # Check that the data was properly JSON encoded
+        call_args = mock_post.call_args
+        headers = call_args[1]['headers']
+        self.assertEqual(headers['Content-Type'], 'application/json')
+        
+        # Verify the data was converted to JSON properly
+        import json
+        sent_data = json.loads(call_args[1]['data'])
+        self.assertEqual(len(sent_data), 3)
+    
+    @patch('requests.post')
+    def test_api_error_handling(self, mock_post):
+        """Test error handling when API returns an error."""
+        # Mock the API to raise an exception
+        mock_post.side_effect = requests.exceptions.RequestException("API error")
+        
+        # Test that the error is propagated
+        with self.assertRaises(requests.exceptions.RequestException):
+            load_data(self.sample_data, "https://test-api.example.com/data")
+    {{ end }}
+    
+    def test_load_non_dataframe(self):
+        """Test loading data that is not a DataFrame."""
+        # Test with a list of dictionaries
+        list_data = [
+            {'id': 1, 'name': 'A', 'value': 10.5},
+            {'id': 2, 'name': 'B', 'value': 20.0},
+            {'id': 3, 'name': 'C', 'value': 30.5}
+        ]
+        
+        {{ if eq .LoadDestination "file" }}
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            output_path = os.path.join(tmpdirname, "output.csv")
+            load_data(list_data, output_path)
+            self.assertTrue(os.path.exists(output_path))
+        {{ else if eq .LoadDestination "database" }}
+        with patch('sqlalchemy.create_engine'), patch.object(pd.DataFrame, 'to_sql') as mock_to_sql:
+            load_data(list_data, "test_table")
+            mock_to_sql.assert_called_once()
+        {{ else if eq .LoadDestination "api" }}
+        with patch('requests.post') as mock_post:
+            mock_post.return_value.status_code = 200
+            mock_post.return_value.json.return_value = {"status": "success"}
+            load_data(list_data, "https://test-api.example.com/data")
+            mock_post.assert_called_once()
+        {{ end }}
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,24 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="{{ .PackageName }}",
+    version="0.1.0",
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
+    python_requires="{{ .PythonVersion }}",
+    description="{{ .Description }}",
+    author="",
+    author_email="",
+    install_requires=[
+        {{ range .Dependencies }}"{{ . }}",
+        {{ end }}
+    ],
+    classifiers=[
+        "Development Status :: 3 - Alpha",
+        "Intended Audience :: Developers",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+    ],
+)

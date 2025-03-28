@@ -1,0 +1,174 @@
+"""Load data to {{ .LoadDestination }} destination."""
+import logging
+import os
+from typing import Any
+
+{{ if eq .LoadDestination "file" }}
+import pandas as pd
+{{ else if eq .LoadDestination "database" }}
+import pandas as pd
+from sqlalchemy import create_engine, Table, MetaData
+{{ else if eq .LoadDestination "api" }}
+import json
+import requests
+from requests.exceptions import RequestException
+{{ end }}
+
+logger = logging.getLogger(__name__)
+
+{{ if eq .LoadDestination "file" }}
+def load_data(data: Any, output_path: str = "data/output") -> None:
+    """
+    Load data to a file.
+    
+    Args:
+        data: The transformed data to load
+        output_path: Path where the output file(s) should be saved
+    """
+    logger.info(f"Loading data to file at {output_path}")
+    
+    try:
+        # Convert to DataFrame if not already
+        if not isinstance(data, pd.DataFrame):
+            data = pd.DataFrame(data)
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Determine the file format to use
+        if output_path.endswith('/'):
+            # Default to CSV if only a directory is specified
+            output_file = os.path.join(output_path, "output.csv")
+        else:
+            output_file = output_path
+            # Create parent directory if needed
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        
+        # Save the data based on file extension
+        _, ext = os.path.splitext(output_file)
+        
+        if ext.lower() == '.csv':
+            data.to_csv(output_file, index=False)
+            logger.info(f"Data saved as CSV to {output_file}")
+        elif ext.lower() in ['.xls', '.xlsx']:
+            data.to_excel(output_file, index=False)
+            logger.info(f"Data saved as Excel to {output_file}")
+        elif ext.lower() == '.json':
+            data.to_json(output_file, orient='records')
+            logger.info(f"Data saved as JSON to {output_file}")
+        elif ext.lower() == '.parquet':
+            data.to_parquet(output_file, index=False)
+            logger.info(f"Data saved as Parquet to {output_file}")
+        else:
+            # Default to CSV
+            if not ext:
+                output_file = f"{output_file}.csv"
+            data.to_csv(output_file, index=False)
+            logger.info(f"Data saved as CSV to {output_file}")
+        
+        logger.info(f"Successfully loaded {len(data)} rows to {output_file}")
+        
+    except Exception as e:
+        logger.error(f"Error loading data to file: {str(e)}")
+        raise
+
+{{ else if eq .LoadDestination "database" }}
+def load_data(data: Any, table_name: str = "output_table", if_exists: str = "replace") -> None:
+    """
+    Load data to a database.
+    
+    Args:
+        data: The transformed data to load
+        table_name: Name of the table to load data into
+        if_exists: Strategy if table exists ('fail', 'replace', or 'append')
+    """
+    logger.info(f"Loading data to database table '{table_name}'")
+    
+    try:
+        # Convert to DataFrame if not already
+        if not isinstance(data, pd.DataFrame):
+            data = pd.DataFrame(data)
+        
+        # Get database connection parameters from environment variables
+        db_user = os.getenv("DB_USER", "postgres")
+        db_password = os.getenv("DB_PASSWORD", "password")
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = os.getenv("DB_PORT", "5432")
+        db_name = os.getenv("DB_NAME", "database")
+        
+        # Create database connection string
+        db_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        
+        # Create engine
+        engine = create_engine(db_url)
+        
+        # Load data to database
+        data.to_sql(
+            name=table_name,
+            con=engine,
+            if_exists=if_exists,
+            index=False,
+            # Optional: Define schema or column mappings
+            # schema='public',
+            # dtype={...}
+        )
+        
+        logger.info(f"Successfully loaded {len(data)} rows to database table '{table_name}' using '{if_exists}' strategy")
+        
+    except Exception as e:
+        logger.error(f"Error loading data to database: {str(e)}")
+        raise
+
+{{ else if eq .LoadDestination "api" }}
+def load_data(data: Any, api_url: str = None) -> None:
+    """
+    Load data to an API.
+    
+    Args:
+        data: The transformed data to load
+        api_url: URL of the API endpoint
+    """
+    # Use default URL if none provided
+    if api_url is None:
+        # Use environment variable or default
+        api_url = os.getenv("API_URL", "https://api.example.com/data")
+    
+    logger.info(f"Loading data to API: {api_url}")
+    
+    try:
+        # Convert to DataFrame if it's a DataFrame
+        if isinstance(data, pd.DataFrame):
+            # Convert DataFrame to list of dictionaries
+            data = data.to_dict(orient='records')
+        
+        # Add any necessary headers or auth
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "{{ .PackageName }}/0.1.0",
+            # "Authorization": "Bearer YOUR_TOKEN_HERE"
+        }
+        
+        # Convert data to JSON
+        json_data = json.dumps(data)
+        
+        # Send POST request to API
+        response = requests.post(api_url, headers=headers, data=json_data, timeout=30)
+        response.raise_for_status()  # Raise exception for non-200 status codes
+        
+        # Log success
+        logger.info(f"Successfully loaded data to API. Response: {response.status_code}")
+        
+        # Optional: Process the API response
+        response_data = response.json()
+        logger.debug(f"API response: {response_data}")
+        
+    except RequestException as e:
+        logger.error(f"Error connecting to API: {str(e)}")
+        raise
+    except ValueError as e:
+        logger.error(f"Error with data format or API response: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during API data loading: {str(e)}")
+        raise
+{{ end }}
