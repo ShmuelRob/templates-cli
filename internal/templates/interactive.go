@@ -39,8 +39,32 @@ func InteractiveGenerator(c *cli.Context) error {
 }
 
 // promptProjectType asks the user to select a project type
+// func promptProjectType() (ProjectType, error) {
+// 	var projectType ProjectType
+
+// 	prompt := &survey.Select{
+// 		Message: "What type of project do you want to create?",
+// 		Options: []string{
+// 			string(ETLProject),
+// 			// Add more project types here
+// 		},
+// 		Description: func(value string, index int) string {
+// 			switch value {
+// 			case string(ETLProject):
+// 				return "A data pipeline for extracting, transforming, and loading data"
+// 			default:
+// 				return ""
+// 			}
+// 		},
+// 	}
+
+// 	err := survey.AskOne(prompt, &projectType)
+// 	return projectType, err
+// }
+
+// promptProjectType asks the user to select a project type
 func promptProjectType() (ProjectType, error) {
-	var projectType ProjectType
+	var projectTypeStr string
 
 	prompt := &survey.Select{
 		Message: "What type of project do you want to create?",
@@ -58,8 +82,8 @@ func promptProjectType() (ProjectType, error) {
 		},
 	}
 
-	err := survey.AskOne(prompt, &projectType)
-	return projectType, err
+	err := survey.AskOne(prompt, &projectTypeStr)
+	return ProjectType(projectTypeStr), err
 }
 
 // promptETLProjectDetails collects details for an ETL project
