@@ -1,4 +1,4 @@
-module github.com/ShmuelRob/templates-cli/internal/cli
+module github.com/ShmuelRob/templates-cli
 
 go 1.18
 
