@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ShmuelRob/python-template-generator/internal/cli"
+	"github.com/ShmuelRob/templates-cli/internal/cli"
 )
 
 func main() {
